@@ -1,38 +1,11 @@
 import PyPDF2
-import re
 from transaction import Transaction
+import util
+import csv
+import os
 
-FOOTER_STRING = "Please note that youarebound byaduty under therules governing theoperation ofthisaccount"
-BALANCE_STRING = "BALANCE B/F"
-
-
-def clean_amount(text):
-    return float(text.replace(',', ''))
-
-
-def match_multi_line_transaction_start(text):
-    pattern = r'(?i)((?:\d\d) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))(.*)'
-    return re.match(pattern, text.strip())
-
-
-def is_date(text):
-    pattern = r'(?i)(\d\d) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(.*)'
-    return re.match(pattern, text.strip())
-
-
-def is_single_line_transaction(text):
-    pattern = (r'(?i)((?:\d\d) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))(.*) (\d+,?\d+\.(?:\d+)) (\d+,'
-               r'?\d+\.(?:\d+))')
-    return re.match(pattern, text.strip())
-
-
-def match_balance(text):
-    pattern = r'(?i)(.*) (\d+,?\d+\.(?:\d+))'
-    return re.match(pattern, text.strip())
-
-
-def is_transaction_start(text):
-    return BALANCE_STRING not in text
+FOOTER_STRING = 'Please note that youarebound byaduty under therules governing theoperation ofthisaccount'
+PARENT_DIR = './output/'
 
 
 def clean_text(text):
@@ -45,15 +18,16 @@ def clean_text(text):
         if index >= i:
             continue
 
-        if is_date(lines[i]) and is_transaction_start(lines[i]):
+        if util.is_date(lines[i]) and util.is_transaction_start(lines[i]):
             transaction_start.append(i)
 
-            match = is_single_line_transaction(lines[i])
+            match = util.is_single_line_transaction(lines[i])
             if match:
-                transactions.append(Transaction(match.group(1), match.group(2), clean_amount(match.group(3)),
-                                                clean_amount(match.group(4))))
+                transactions.append(
+                    Transaction(match.group(1), match.group(2), util.clean_amount(match.group(3)),
+                                util.clean_amount(match.group(4))))
             else:
-                match = match_multi_line_transaction_start(lines[i])
+                match = util.match_multi_line_transaction_start(lines[i])
 
                 if not match:
                     continue
@@ -63,12 +37,12 @@ def clean_text(text):
                 balance = None
 
                 index = i + 1
-                while index < len(lines) and not is_date(lines[index]):
-                    match = match_balance(lines[index])
+                while index < len(lines) and not util.is_date(lines[index]):
+                    match = util.match_balance(lines[index])
 
                     if match:
                         description += match.group(1)
-                        balance = clean_amount(match.group(2))
+                        balance = util.clean_amount(match.group(2))
                     else:
                         description += lines[index]
 
@@ -77,37 +51,44 @@ def clean_text(text):
                 index -= 1
                 transactions.append(Transaction(date, description, None, balance))
 
-    for i in range(1, len(transactions)):
-        transactions[i].difference = round(transactions[i].balance - transactions[i - 1].balance, 2)
-
     return transactions
 
 
-# Open the PDF file in binary mode
-with open('example.pdf', 'rb') as file:
-    # Create a PDF reader object
-    pdf_reader = PyPDF2.PdfReader(file)
+def get_csv_name(file_name):
+    return file_name.rsplit('.pdf', 1)[0] + '.csv'
 
-    # Get the total number of pages in the PDF
-    num_pages = len(pdf_reader.pages)
 
-    pages = []
+def write_to_csv(file_path, data):
+    file_name = os.path.basename(file_path)
+    csv_file_name = get_csv_name(file_name)
 
-    # Iterate through each page and extract text
-    for page_number in range(1, num_pages - 1):
-        # Get a specific page
-        page = pdf_reader.pages[page_number]
+    if not os.path.exists(PARENT_DIR):
+        os.makedirs(PARENT_DIR)
 
-        # Extract text from the page
-        text = page.extract_text()
-        pages.append(text)
+    with open(PARENT_DIR + csv_file_name, 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        for tuple_item in data:
+            csv_writer.writerow(tuple_item)
 
-    csv = [('Date', 'Description', 'Difference', 'Balance')]
-    for i in range(len(pages)):
-        transactions = clean_text(pages[i])
-        csv += [transaction.to_tuple() for transaction in transactions]
 
-    for c in csv:
-        print(c)
+def convert_to_csv():
+    with open('input/example.pdf', 'rb') as file:
+        pdf_reader = PyPDF2.PdfReader(file)
+        num_pages = len(pdf_reader.pages)
+        rows = [('Date', 'Description', 'Difference', 'Balance')]
+        transactions = []
 
-    print(len(csv))
+        for page_number in range(1, num_pages - 1):
+            page = pdf_reader.pages[page_number]
+            text = page.extract_text()
+            transactions += clean_text(text)
+
+        for i in range(1, len(transactions)):
+            transactions[i].difference = round(transactions[i].balance - transactions[i - 1].balance, 2)
+
+        rows += [transaction.to_tuple() for transaction in transactions]
+        write_to_csv('input/example.pdf', rows)
+
+
+if __name__ == '__main__':
+    convert_to_csv()
