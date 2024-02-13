@@ -1,11 +1,15 @@
-import PyPDF2
-from transaction import Transaction
-import util
 import csv
 import os
+from datetime import datetime
+
+import PyPDF2
+
+import util
+from transaction import Transaction
 
 FOOTER_STRING = 'Please note that youarebound byaduty under therules governing theoperation ofthisaccount'
-PARENT_DIR = './output/'
+INPUT_DIR = './input'
+OUTPUT_DIR = './output'
 
 
 def clean_text(text):
@@ -58,36 +62,44 @@ def get_csv_name(file_name):
     return file_name.rsplit('.pdf', 1)[0] + '.csv'
 
 
-def write_to_csv(file_path, data):
+def write_to_csv(file_path, datetime_string, data):
     file_name = os.path.basename(file_path)
     csv_file_name = get_csv_name(file_name)
 
-    if not os.path.exists(PARENT_DIR):
-        os.makedirs(PARENT_DIR)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
 
-    with open(PARENT_DIR + csv_file_name, 'w', newline='') as csvfile:
+    if not os.path.exists(os.path.join(OUTPUT_DIR, datetime_string)):
+        os.makedirs((os.path.join(OUTPUT_DIR, datetime_string)))
+
+    with open(os.path.join(OUTPUT_DIR, datetime_string, csv_file_name), 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         for tuple_item in data:
             csv_writer.writerow(tuple_item)
 
 
 def convert_to_csv():
-    with open('input/example.pdf', 'rb') as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        num_pages = len(pdf_reader.pages)
-        rows = [('Date', 'Description', 'Difference', 'Balance')]
-        transactions = []
+    datetime_string = datetime.now().strftime("%Y%m%dT%H%M%S")
 
-        for page_number in range(1, num_pages - 1):
-            page = pdf_reader.pages[page_number]
-            text = page.extract_text()
-            transactions += clean_text(text)
+    pdf_files = [file for file in os.listdir(INPUT_DIR) if file.endswith('.pdf')]
 
-        for i in range(1, len(transactions)):
-            transactions[i].difference = round(transactions[i].balance - transactions[i - 1].balance, 2)
+    for pdf in pdf_files:
+        with open(os.path.join(INPUT_DIR, pdf), 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            num_pages = len(pdf_reader.pages)
+            rows = [('Date', 'Description', 'Difference', 'Balance')]
+            transactions = []
 
-        rows += [transaction.to_tuple() for transaction in transactions]
-        write_to_csv('input/example.pdf', rows)
+            for page_number in range(1, num_pages - 1):
+                page = pdf_reader.pages[page_number]
+                text = page.extract_text()
+                transactions += clean_text(text)
+
+            for i in range(1, len(transactions)):
+                transactions[i].difference = round(transactions[i].balance - transactions[i - 1].balance, 2)
+
+            rows += [transaction.to_tuple() for transaction in transactions]
+            write_to_csv(pdf, datetime_string, rows)
 
 
 if __name__ == '__main__':
