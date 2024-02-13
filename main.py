@@ -103,6 +103,7 @@ def convert_to_csv():
 
                 rows += [transaction.to_tuple() for transaction in transactions]
                 write_to_csv(pdf, datetime_string, rows)
+                log.info("Converted %s to .csv" % pdf)
         except Exception as e:
             log.error("Failed to convert %s to .csv" % pdf, e)
 
