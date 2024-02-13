@@ -5,6 +5,7 @@ from datetime import datetime
 import PyPDF2
 
 import util
+from logger import log
 from transaction import Transaction
 
 FOOTER_STRING = 'Please note that youarebound byaduty under therules governing theoperation ofthisaccount'
@@ -84,22 +85,26 @@ def convert_to_csv():
     pdf_files = [file for file in os.listdir(INPUT_DIR) if file.endswith('.pdf')]
 
     for pdf in pdf_files:
-        with open(os.path.join(INPUT_DIR, pdf), 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            num_pages = len(pdf_reader.pages)
-            rows = [('Date', 'Description', 'Difference', 'Balance')]
-            transactions = []
+        try:
+            log.info("Converting %s to .csv" % pdf)
+            with open(os.path.join(INPUT_DIR, pdf), 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                num_pages = len(pdf_reader.pages)
+                rows = [('Date', 'Description', 'Difference', 'Balance')]
+                transactions = []
 
-            for page_number in range(1, num_pages - 1):
-                page = pdf_reader.pages[page_number]
-                text = page.extract_text()
-                transactions += clean_text(text)
+                for page_number in range(1, num_pages - 1):
+                    page = pdf_reader.pages[page_number]
+                    text = page.extract_text()
+                    transactions += clean_text(text)
 
-            for i in range(1, len(transactions)):
-                transactions[i].difference = round(transactions[i].balance - transactions[i - 1].balance, 2)
+                for i in range(1, len(transactions)):
+                    transactions[i].difference = round(transactions[i].balance - transactions[i - 1].balance, 2)
 
-            rows += [transaction.to_tuple() for transaction in transactions]
-            write_to_csv(pdf, datetime_string, rows)
+                rows += [transaction.to_tuple() for transaction in transactions]
+                write_to_csv(pdf, datetime_string, rows)
+        except Exception as e:
+            log.error("Failed to convert %s to .csv" % pdf, e)
 
 
 if __name__ == '__main__':
